@@ -6,7 +6,6 @@ const confirmDlg = async(title,text,icon='warning') => {const r=await SWL.fire({
 NProgress.configure({showSpinner:false,minimum:0.2});
 
 // ═══ DEFAULTS ═══
-// ACCOUNTS ya no se usa — el login ahora verifica contra USERS en localStorage
 const PAL = ['#00d4aa','#a78bfa','#38bdf8','#f59e0b','#10b981','#ff4560','#0066ff','#f43f5e'];
 const DEF_USERS=[
   {id:1,name:'Carlos Hernández',  email:'C_Hernández@gestion.hn',  pass:'C_Hernández123',  role:'admin',    status:'activo',   last:'Hoy 09:42',    init:'CH',color:'#00d4aa'},
@@ -24,7 +23,6 @@ const DEF_MOVS=[{id:1,fecha:'2026-03-01',prodId:1,prod:'Café Molido 500g',tipo:
 // ═══ LOCALSTORAGE ═══
 const LS={get:(k,d)=>{try{const v=localStorage.getItem('sga_'+k);return v?JSON.parse(v):d;}catch{return d;}},set:(k,v)=>{try{localStorage.setItem('sga_'+k,JSON.stringify(v));}catch(e){}},clear:()=>{Object.keys(localStorage).filter(k=>k.startsWith('sga_')).forEach(k=>localStorage.removeItem(k));}};
 
-// Control de versión: si cambió, limpiar datos viejos y usar los nuevos defaults
 const APP_VERSION = 'v4.2';
 if(LS.get('app_version','') !== APP_VERSION){
   LS.clear();
@@ -47,6 +45,13 @@ function save(){LS.set('users',USERS);LS.set('products',PRODUCTS);LS.set('provee
 const $=id=>document.getElementById(id);
 const fmt=n=>'L '+Number(n).toLocaleString('es-HN',{minimumFractionDigits:2,maximumFractionDigits:2});
 const today=()=>new Date().toISOString().split('T')[0];
+
+// ── CORRECCIÓN 1: prefijo de mes dinámico (no hardcodeado) ──
+const currentMonthPrefix=()=>{
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+};
+
 let chartWeekly=null,chartMonthly=null;
 
 // Flatpickr instances
@@ -54,7 +59,6 @@ let fpMV=null,fpMC=null,fpMM=null,fpHD=null,fpHH=null;
 
 function initFlatpickr(){
   const base={locale:'es',dateFormat:'Y-m-d',disableMobile:true};
-  // Para modales: appendTo hace que el calendario se adjunte al body para evitar clipping
   const modalOpts={...base,defaultDate:'today',appendTo:document.body};
   const filterOpts={...base,dateFormat:'d/m/Y',appendTo:document.body};
   fpMV=flatpickr('#mv-fecha',modalOpts);
@@ -66,7 +70,6 @@ function initFlatpickr(){
   flatpickr('#rpt-hasta',{...filterOpts,defaultDate:null});
 }
 
-// Obtener valor Y-m-d del flatpickr, con fallback al valor del input
 function getFP(fp,inputId){
   if(fp&&fp.selectedDates&&fp.selectedDates[0]){
     const d=fp.selectedDates[0];
@@ -81,7 +84,6 @@ function doLogin(){
   NProgress.start();
   const inputUser=$('l-user').value.trim().toLowerCase();
   const inputPass=$('l-pass').value;
-  // Buscar en USERS (localStorage) por email o nombre
   const found = USERS.find(u =>
     u.email.toLowerCase() === inputUser && u.pass === inputPass
   );
@@ -123,9 +125,6 @@ function bootApp(){
   $('role-badge').textContent=isAdmin?'ADMINISTRADOR':'EMPLEADO';$('role-badge').className='badge '+(isAdmin?'badge-admin':'badge-emp');
   $('topbar-date').textContent=new Date().toLocaleDateString('es-HN',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
 
-  // FIX PRINCIPAL: Asignar onclick directamente, NO usar null para admin
-  // Para admin: asignamos la función correcta
-  // Para empleado: asignamos función que muestra error
   const adminBtns={
     'btn-add-user':()=>{ resetUserModal(); openModal('modal-user'); },
     'btn-add-prod':()=>{ populateSelects(); openModal('modal-prod'); },
@@ -151,7 +150,6 @@ function bootApp(){
 
 // ═══ MODALES ═══
 function openModal(id){
-  // Actualizar selects antes de abrir
   populateSelects();
   $(id).classList.add('open');
 }
@@ -182,9 +180,10 @@ function renderDashboard(){
   const gM=ctxM.createLinearGradient(0,0,0,200);gM.addColorStop(0,'rgba(0,212,170,.4)');gM.addColorStop(1,'rgba(0,212,170,.02)');
   chartMonthly=new Chart(ctxM,{type:'line',data:{labels:months,datasets:[{label:'Ventas (L)',data:mvals,borderColor:'#00d4aa',backgroundColor:gM,fill:true,tension:0.4,pointBackgroundColor:'#00d4aa',pointBorderColor:'#0d1117',pointBorderWidth:2,pointRadius:5,pointHoverRadius:7}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'L '+c.raw.toLocaleString()},backgroundColor:'#161b27',titleColor:'#e2eaf8',bodyColor:'#8ba3be',borderColor:'#2a3547',borderWidth:1,padding:10,cornerRadius:8}},scales:{x:{grid:{color:'rgba(33,41,58,.5)'},ticks:{color:'#5a7494',font:{size:11,family:'JetBrains Mono'}}},y:{grid:{color:'rgba(33,41,58,.5)'},ticks:{color:'#5a7494',font:{size:10,family:'JetBrains Mono'},callback:v=>'L'+v/1000+'k'}}}}});
 
-  // Stats dashboard
-  const mes=VENTAS.filter(v=>v.fecha.startsWith('2026-03'));
-  const mesC=COMPRAS.filter(c=>c.fecha.startsWith('2026-03'));
+  // Stats dashboard — usa mes dinámico
+  const mesPrefix=currentMonthPrefix();
+  const mes=VENTAS.filter(v=>v.fecha.startsWith(mesPrefix));
+  const mesC=COMPRAS.filter(c=>c.fecha.startsWith(mesPrefix));
   $('dash-ventas-mes').textContent=fmt(mes.reduce((s,v)=>s+v.total,0));
   $('dash-ventas-sub').textContent=mes.length+' transacciones';
   $('dash-compras-mes').textContent=fmt(mesC.reduce((s,c)=>s+c.total,0));
@@ -208,9 +207,8 @@ function renderUsers(list){
   const isAdmin = CU && CU.role==='admin';
   $('users-tbody').innerHTML = list.map(u=>{
     const isSelf = CU && CU.email === u.email;
-    // Empleado: solo puede editar su propio usuario. Admin: puede editar y borrar a todos.
     const canEdit   = isAdmin || isSelf;
-    const canDelete = isAdmin && !isSelf; // nadie se puede borrar a sí mismo
+    const canDelete = isAdmin && !isSelf;
     return `<tr>
       <td><div class="user-cell"><div class="avatar av-md" style="background:${u.color};">${u.init}</div><div><div class="cell-main">${u.name}</div><div class="cell-sub">${u.email}</div></div></div></td>
       <td><span class="badge ${u.role==='admin'?'badge-admin':'badge-emp'}">${u.role.toUpperCase()}</span></td>
@@ -223,15 +221,11 @@ function renderUsers(list){
     </tr>`;
   }).join('');
 }
-// Abrir modal con datos del usuario para editar
 function editUser(id){
   const u = USERS.find(x=>x.id===id); if(!u) return;
   const isAdmin = CU && CU.role==='admin';
   const isSelf  = CU && CU.email===u.email;
-
-  // Seguridad: empleado solo puede editar su propio perfil
   if(!isAdmin && !isSelf){ toast('Sin permisos para editar este usuario','error'); return; }
-
   $('mu-title').textContent = isSelf ? 'Editar mi Perfil' : `Editar: ${u.name}`;
   $('mu-name').value  = u.name;
   $('mu-email').value = u.email;
@@ -239,24 +233,16 @@ function editUser(id){
   $('mu-pass').placeholder = 'Dejar vacío para no cambiar contraseña';
   $('mu-role').value   = u.role;
   $('mu-status').value = u.status;
-
-  // Admin puede cambiar correo, rol y estado de cualquiera
-  // Empleado editando su propio perfil: puede cambiar correo, pero NO su rol ni estado
-  const emailEditable  = true; // todos pueden cambiar su correo
   const roleEditable   = isAdmin;
   const statusEditable = isAdmin;
-
-  $('mu-email').readOnly     = !emailEditable;
-  $('mu-email').style.opacity = emailEditable ? '1' : '.5';
-
+  $('mu-email').readOnly     = false;
+  $('mu-email').style.opacity = '1';
   $('mu-role').disabled       = !roleEditable;
   $('mu-role').style.opacity  = roleEditable ? '1' : '.5';
   $('mu-role').title          = roleEditable ? '' : 'Solo administradores pueden cambiar el rol';
-
   $('mu-status').disabled      = !statusEditable;
   $('mu-status').style.opacity = statusEditable ? '1' : '.5';
   $('mu-status').title         = statusEditable ? '' : 'Solo administradores pueden cambiar el estado';
-
   $('mu-save-btn').onclick = ()=>updateUser(id);
   openModal('modal-user');
 }
@@ -264,35 +250,25 @@ function updateUser(id){
   const u = USERS.find(x=>x.id===id); if(!u) return;
   const isAdmin = CU && CU.role==='admin';
   const isSelf  = CU && CU.email===u.email;
-
   const name   = $('mu-name').value.trim();
   const email  = $('mu-email').value.trim().toLowerCase();
   const pass   = $('mu-pass').value;
-  const role   = isAdmin ? $('mu-role').value   : u.role;   // solo admin puede cambiar
-  const status = isAdmin ? $('mu-status').value : u.status; // solo admin puede cambiar
-
+  const role   = isAdmin ? $('mu-role').value   : u.role;
+  const status = isAdmin ? $('mu-status').value : u.status;
   if(!name)  { toast('El nombre es requerido','error'); return; }
   if(!email) { toast('El correo es requerido','error'); return; }
   if(pass && pass.length<6){ toast('La contraseña debe tener al menos 6 caracteres','error'); return; }
-
-  // Verificar que el nuevo correo no lo use otro usuario
   const emailConflict = USERS.find(x=> x.id!==id && x.email.toLowerCase()===email);
   if(emailConflict){ toast('Ese correo ya está en uso por otro usuario','error'); return; }
-
-  const oldEmail = u.email;
-
-  // Actualizar objeto en array
   u.name   = name;
   u.email  = email;
   u.role   = role;
   u.status = status;
   u.init   = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
   if(pass)  u.pass = pass;
-
-  // Si se editó el propio usuario, sincronizar sesión activa
   if(isSelf){
     CU.name     = name;
-    CU.email    = email; // correo actualizado
+    CU.email    = email;
     CU.role     = role;
     CU.initials = u.init;
     $('sb-name').textContent  = name;
@@ -307,7 +283,6 @@ function updateUser(id){
     $('p-badge').textContent    = role==='admin'?'ADMIN':'EMPLEADO';
     $('p-badge').className      = 'badge '+(role==='admin'?'badge-admin':'badge-emp');
   }
-
   save(); renderUsers(USERS); refreshUserStats();
   closeModal('modal-user'); resetUserModal();
   toast(`Usuario "${name}" actualizado correctamente`,'success');
@@ -323,7 +298,7 @@ function resetUserModal(){
   $('mu-status').style.opacity = '1';
   $('mu-status').title         = '';
   $('mu-pass').placeholder     = 'Mínimo 6 caracteres';
-  $('mu-pass').type            = 'password'; // reset visibility
+  $('mu-pass').type            = 'password';
   const eyeBtn = $('mu-pass').parentElement.querySelector('.eye-btn');
   if(eyeBtn){ eyeBtn.querySelector('.eye-open').style.display=''; eyeBtn.querySelector('.eye-closed').style.display='none'; }
   $('mu-save-btn').onclick      = saveUser;
@@ -354,16 +329,11 @@ function saveProfile(){
   const name    = $('p-name-in').value.trim();
   const email   = $('p-email-in').value.trim().toLowerCase();
   const newpass = $('p-newpass').value;
-
   if(!name)  { toast('El nombre no puede estar vacío','error'); return; }
   if(!email) { toast('El correo no puede estar vacío','error'); return; }
   if(newpass && newpass.length<6){ toast('La contraseña debe tener al menos 6 caracteres','error'); return; }
-
-  // Verificar que el nuevo correo no lo use otro usuario
   const conflict = USERS.find(x=> x.email.toLowerCase()===email && x.email.toLowerCase()!==CU.email.toLowerCase());
   if(conflict){ toast('Ese correo ya está en uso por otro usuario','error'); return; }
-
-  // Actualizar en USERS
   const u = USERS.find(x => x.email.toLowerCase() === CU.email.toLowerCase());
   if(u){
     u.name  = name;
@@ -371,13 +341,9 @@ function saveProfile(){
     u.init  = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     if(newpass) u.pass = newpass;
   }
-
-  // Actualizar sesión activa
   CU.name     = name;
   CU.email    = email;
   CU.initials = u ? u.init : CU.initials;
-
-  // Reflejar en UI
   $('sb-name').textContent  = name;
   $('sb-av').textContent    = CU.initials;
   $('p-name').textContent   = name;
@@ -385,10 +351,8 @@ function saveProfile(){
   $('p-name-in').value      = name;
   $('p-email-in').value     = email;
   $('p-newpass').value      = '';
-
   save();
   renderUsers(USERS);
-
   const msg = newpass ? 'Perfil y contraseña actualizados' : 'Perfil actualizado correctamente';
   toast(msg, 'success');
 }
@@ -518,9 +482,33 @@ async function deleteProv(id){
 
 // ═══ OPERACIONES ═══
 function renderVentas(list){$('ventas-tbody').innerHTML=list.length?list.map(v=>`<tr><td class="mono text-muted">#${v.id}</td><td class="mono text-muted" style="font-size:12px;">${v.fecha}</td><td class="fw-700">${v.prod}</td><td class="mono">${v.qty}</td><td class="mono fw-700 text-success">${fmt(v.total)}</td><td>${v.emp}</td><td><span class="badge ${v.status==='completada'?'badge-success':'badge-warning'}">${v.status.toUpperCase()}</span></td><td><button class="btn-icon-sm red" onclick="deleteVenta(${v.id})">🗑️</button></td></tr>`).join(''):`<tr><td colspan="8"><div class="empty-state"><div class="es-icon">💳</div><h4>Sin ventas</h4></div></td></tr>`;}
-function refreshVentasStats(){const tod=today(),hoy=VENTAS.filter(v=>v.fecha===tod),mes=VENTAS.filter(v=>v.fecha.startsWith('2026-03'));$('v-hoy').textContent=fmt(hoy.reduce((s,v)=>s+v.total,0));$('v-hoy-n').textContent=hoy.length+' transacciones';$('v-mes').textContent=fmt(mes.reduce((s,v)=>s+v.total,0));$('v-mes-n').textContent=mes.length+' transacciones';const avg=VENTAS.length?VENTAS.reduce((s,v)=>s+v.total,0)/VENTAS.length:0;$('v-prom').textContent=fmt(avg);}
+
+// ── CORRECCIÓN 2: refreshVentasStats usa mes dinámico ──
+function refreshVentasStats(){
+  const mesPrefix=currentMonthPrefix();
+  const tod=today();
+  const hoy=VENTAS.filter(v=>v.fecha===tod);
+  const mes=VENTAS.filter(v=>v.fecha.startsWith(mesPrefix));
+  $('v-hoy').textContent=fmt(hoy.reduce((s,v)=>s+v.total,0));
+  $('v-hoy-n').textContent=hoy.length+' transacciones';
+  $('v-mes').textContent=fmt(mes.reduce((s,v)=>s+v.total,0));
+  $('v-mes-n').textContent=mes.length+' transacciones';
+  const avg=VENTAS.length?VENTAS.reduce((s,v)=>s+v.total,0)/VENTAS.length:0;
+  $('v-prom').textContent=fmt(avg);
+}
+
 function renderCompras(list){$('compras-tbody').innerHTML=list.length?list.map(c=>`<tr><td class="mono text-muted">#${c.id}</td><td class="mono text-muted" style="font-size:12px;">${c.fecha}</td><td>${c.prov}</td><td class="fw-700">${c.prod}</td><td class="mono">${c.qty}</td><td class="mono fw-700" style="color:var(--warning);">${fmt(c.total)}</td><td><span class="badge ${c.status==='completada'?'badge-success':'badge-warning'}">${c.status.toUpperCase()}</span></td><td><button class="btn-icon-sm red" onclick="deleteCompra(${c.id})">🗑️</button></td></tr>`).join(''):`<tr><td colspan="8"><div class="empty-state"><div class="es-icon">🛒</div><h4>Sin compras</h4></div></td></tr>`;}
-function refreshComprasStats(){const mes=COMPRAS.filter(c=>c.fecha.startsWith('2026-03'));$('c-mes').textContent=fmt(mes.reduce((s,c)=>s+c.total,0));$('c-mes-n').textContent=mes.length+' órdenes';$('c-pend').textContent=COMPRAS.filter(c=>c.status==='pendiente').length;$('c-comp').textContent=COMPRAS.filter(c=>c.status==='completada').length;}
+
+// ── refreshComprasStats también usa mes dinámico ──
+function refreshComprasStats(){
+  const mesPrefix=currentMonthPrefix();
+  const mes=COMPRAS.filter(c=>c.fecha.startsWith(mesPrefix));
+  $('c-mes').textContent=fmt(mes.reduce((s,c)=>s+c.total,0));
+  $('c-mes-n').textContent=mes.length+' órdenes';
+  $('c-pend').textContent=COMPRAS.filter(c=>c.status==='pendiente').length;
+  $('c-comp').textContent=COMPRAS.filter(c=>c.status==='completada').length;
+}
+
 function renderHistorial(){
   const all=[...VENTAS.map(v=>({fecha:v.fecha,tipo:'VENTA',desc:v.prod+' x'+v.qty,monto:v.total,user:v.emp})),...COMPRAS.map(c=>({fecha:c.fecha,tipo:'COMPRA',desc:c.prod+' — '+c.prov,monto:-c.total,user:'Compras'}))].sort((a,b)=>b.fecha.localeCompare(a.fecha));
   const desde=getFP(fpHD,'hist-desde'),hasta=getFP(fpHH,'hist-hasta');
@@ -569,7 +557,151 @@ function refreshReportStats(){const tv=VENTAS.reduce((s,v)=>s+v.total,0),tc=COMP
 function renderRInv(){$('r-inv-tbody').innerHTML=PRODUCTS.map(p=>{const stC=p.stock===0?'var(--danger)':p.stock<=p.min?'var(--warning)':'var(--success)';const stL=p.stock===0?'Agotado':p.stock<=p.min?'Crítico':'Normal';return `<tr><td class="fw-700">${p.name}</td><td><span class="badge badge-info" style="font-size:10px;">${p.cat}</span></td><td class="mono fw-700" style="color:${stC};">${p.stock}</td><td class="mono text-muted">${p.min}</td><td class="mono fw-700 text-accent">${fmt(p.cost*p.stock)}</td><td><span class="status-pill"><span class="dot ${p.stock===0?'dot-red':p.stock<=p.min?'dot-warn':'dot-on'}"></span>${stL}</span></td></tr>`;}).join('');}
 function renderROps(){const all=[...VENTAS.map(v=>({fecha:v.fecha,tipo:'VENTA',prod:v.prod,qty:v.qty,monto:v.total,user:v.emp})),...COMPRAS.map(c=>({fecha:c.fecha,tipo:'COMPRA',prod:c.prod,qty:c.qty,monto:-c.total,user:'Compras'}))].sort((a,b)=>b.fecha.localeCompare(a.fecha));$('r-ops-tbody').innerHTML=all.map(r=>`<tr><td class="mono text-muted" style="font-size:12px;">${r.fecha}</td><td><span class="badge ${r.tipo==='VENTA'?'badge-success':'badge-warning'}">${r.tipo}</span></td><td class="fw-700">${r.prod}</td><td class="mono">${r.qty}</td><td class="mono fw-700 ${r.monto>0?'text-success':'text-danger'}">${r.monto>0?'+':''}${fmt(Math.abs(r.monto))}</td><td>${r.user}</td></tr>`).join('');}
 function rtab(btn,tab){document.querySelectorAll('#panel-reportes .tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');$('r-resumen').style.display=tab==='r-resumen'?'block':'none';$('r-inv').style.display=tab==='r-inv'?'block':'none';$('r-ops').style.display=tab==='r-ops'?'block':'none';}
-function generarReporte(){NProgress.start();setTimeout(()=>{NProgress.done();Swal.fire({icon:'success',title:'Reporte generado',html:`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;font-family:JetBrains Mono,monospace;font-size:12px;color:var(--text-dim);text-align:left;">Productos: <b style="color:var(--accent)">${PRODUCTS.length}</b><br>Ventas: <b style="color:var(--success)">${VENTAS.length}</b><br>Compras: <b style="color:var(--warning)">${COMPRAS.length}</b><br>Generado: ${new Date().toLocaleString('es-HN')}</div>`,background:'var(--surface)',color:'var(--text)',confirmButtonText:'Cerrar',customClass:{confirmButton:'swal2-confirm'},buttonsStyling:false});},800);}
+
+// ── CORRECCIÓN 3: generarReporte descarga un PDF real usando la API de impresión del navegador ──
+function generarReporte(){
+  NProgress.start();
+  const tv=VENTAS.reduce((s,v)=>s+v.total,0);
+  const tc=COMPRAS.reduce((s,c)=>s+c.total,0);
+  const ganancia=tv-tc;
+  const mesPrefix=currentMonthPrefix();
+  const ventasMes=VENTAS.filter(v=>v.fecha.startsWith(mesPrefix));
+  const comprasMes=COMPRAS.filter(c=>c.fecha.startsWith(mesPrefix));
+  const generadoEn=new Date().toLocaleString('es-HN');
+  const tipoEl=document.querySelector('#r-resumen select');
+  const tipo=tipoEl?tipoEl.value:'General';
+
+  // Filas de ventas
+  const filasVentas=VENTAS.slice().reverse().map(v=>`
+    <tr>
+      <td>${v.fecha}</td><td>${v.prod}</td><td style="text-align:center;">${v.qty}</td>
+      <td style="text-align:right;">L ${v.total.toLocaleString('es-HN',{minimumFractionDigits:2})}</td>
+      <td>${v.emp}</td>
+      <td style="text-align:center;color:${v.status==='completada'?'#00c875':'#f59e0b'};">${v.status.toUpperCase()}</td>
+    </tr>`).join('');
+
+  // Filas de compras
+  const filasCompras=COMPRAS.slice().reverse().map(c=>`
+    <tr>
+      <td>${c.fecha}</td><td>${c.prov}</td><td>${c.prod}</td><td style="text-align:center;">${c.qty}</td>
+      <td style="text-align:right;">L ${c.total.toLocaleString('es-HN',{minimumFractionDigits:2})}</td>
+      <td style="text-align:center;color:${c.status==='completada'?'#00c875':'#f59e0b'};">${c.status.toUpperCase()}</td>
+    </tr>`).join('');
+
+  // Filas de inventario
+  const filasInv=PRODUCTS.map(p=>`
+    <tr>
+      <td>${p.name}</td><td>${p.cat}</td><td>${p.sku}</td>
+      <td style="text-align:center;color:${p.stock===0?'#ff4560':p.stock<=p.min?'#f59e0b':'#00c875'};">${p.stock}</td>
+      <td style="text-align:center;">${p.min}</td>
+      <td style="text-align:right;">L ${p.price.toLocaleString('es-HN',{minimumFractionDigits:2})}</td>
+      <td style="text-align:right;">L ${(p.cost*p.stock).toLocaleString('es-HN',{minimumFractionDigits:2})}</td>
+    </tr>`).join('');
+
+  const htmlContent=`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte ${tipo} — Gestión Inteligente S.A.</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;padding:28px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #00d4aa;}
+  .header-left h1{font-size:20px;color:#00d4aa;font-weight:900;letter-spacing:-0.5px;}
+  .header-left p{font-size:11px;color:#666;margin-top:2px;}
+  .header-right{text-align:right;}
+  .header-right .badge{background:#00d4aa;color:#fff;font-size:10px;font-weight:700;padding:4px 12px;border-radius:20px;display:inline-block;margin-bottom:4px;}
+  .header-right p{font-size:10px;color:#999;}
+  .kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:22px;}
+  .kpi{border:1px solid #e0e0e0;border-radius:8px;padding:14px;text-align:center;}
+  .kpi .val{font-size:18px;font-weight:900;letter-spacing:-0.5px;}
+  .kpi .lbl{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-top:3px;}
+  .kpi.green .val{color:#00c875;} .kpi.red .val{color:#ff4560;} .kpi.teal .val{color:#00d4aa;}
+  .section{margin-bottom:22px;}
+  .section-title{font-size:12px;font-weight:700;color:#1a1a2e;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #e0e0e0;display:flex;align-items:center;gap:6px;}
+  table{width:100%;border-collapse:collapse;font-size:10px;}
+  th{background:#f4f6f9;padding:7px 10px;text-align:left;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#555;border-bottom:1px solid #ddd;}
+  td{padding:6px 10px;border-bottom:1px solid #f0f0f0;vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:nth-child(even) td{background:#fafafa;}
+  .footer{margin-top:28px;padding-top:12px;border-top:1px solid #e0e0e0;display:flex;justify-content:space-between;font-size:9px;color:#aaa;}
+  @media print{body{padding:0;} @page{margin:15mm;}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-left">
+    <h1>Gestión Inteligente S.A.</h1>
+    <p>Sistema de Gestión Administrativa — Honduras</p>
+  </div>
+  <div class="header-right">
+    <div class="badge">REPORTE ${tipo.toUpperCase()}</div>
+    <p>Generado: ${generadoEn}</p>
+    <p>Usuario: ${CU.name}</p>
+  </div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi green"><div class="val">L ${tv.toLocaleString('es-HN',{minimumFractionDigits:2})}</div><div class="lbl">Ventas Totales</div></div>
+  <div class="kpi red"><div class="val">L ${tc.toLocaleString('es-HN',{minimumFractionDigits:2})}</div><div class="lbl">Costo Compras</div></div>
+  <div class="kpi teal"><div class="val">L ${ganancia.toLocaleString('es-HN',{minimumFractionDigits:2})}</div><div class="lbl">Ganancia Bruta</div></div>
+</div>
+
+<div class="kpi-row" style="grid-template-columns:repeat(4,1fr);">
+  <div class="kpi"><div class="val" style="color:#1a1a2e;">${PRODUCTS.length}</div><div class="lbl">Productos</div></div>
+  <div class="kpi"><div class="val" style="color:#00c875;">${ventasMes.length}</div><div class="lbl">Ventas este mes</div></div>
+  <div class="kpi"><div class="val" style="color:#f59e0b;">${comprasMes.length}</div><div class="lbl">Compras este mes</div></div>
+  <div class="kpi"><div class="val" style="color:#a78bfa;">${PROVEEDORES.filter(p=>p.status==='activo').length}</div><div class="lbl">Proveedores activos</div></div>
+</div>
+
+<div class="section">
+  <div class="section-title">📦 Inventario Actual</div>
+  <table>
+    <thead><tr><th>Producto</th><th>Categoría</th><th>SKU</th><th style="text-align:center;">Stock</th><th style="text-align:center;">Mín.</th><th style="text-align:right;">Precio Venta</th><th style="text-align:right;">Valor Stock</th></tr></thead>
+    <tbody>${filasInv}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">💳 Registro de Ventas</div>
+  <table>
+    <thead><tr><th>Fecha</th><th>Producto</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Total</th><th>Empleado</th><th style="text-align:center;">Estado</th></tr></thead>
+    <tbody>${filasVentas}</tbody>
+  </table>
+</div>
+
+<div class="section">
+  <div class="section-title">🛒 Registro de Compras</div>
+  <table>
+    <thead><tr><th>Fecha</th><th>Proveedor</th><th>Producto</th><th style="text-align:center;">Cant.</th><th style="text-align:right;">Total</th><th style="text-align:center;">Estado</th></tr></thead>
+    <tbody>${filasCompras}</tbody>
+  </table>
+</div>
+
+<div class="footer">
+  <span>Gestión Inteligente S.A. — Sistema de Gestión Administrativa</span>
+  <span>Documento generado automáticamente el ${generadoEn}</span>
+</div>
+
+<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script>
+</body></html>`;
+
+  setTimeout(()=>{
+    NProgress.done();
+    const blob=new Blob([htmlContent],{type:'text/html;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const win=window.open(url,'_blank','width=900,height=700,scrollbars=yes');
+    if(!win){
+      // fallback: descarga directa como HTML si el popup fue bloqueado
+      const a=document.createElement('a');
+      a.href=url;
+      a.download='reporte-gestion-'+new Date().toISOString().split('T')[0]+'.html';
+      a.click();
+    }
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
+  },600);
+}
+
 async function resetData(){
   if(!await confirmDlg('¿Resetear todos los datos?','Esto restaurará los datos de demostración. <strong>No se puede deshacer.</strong>','warning'))return;
   LS.clear();USERS=JSON.parse(JSON.stringify(DEF_USERS));PRODUCTS=JSON.parse(JSON.stringify(DEF_PROD));PROVEEDORES=JSON.parse(JSON.stringify(DEF_PROV));VENTAS=JSON.parse(JSON.stringify(DEF_VENTAS));COMPRAS=JSON.parse(JSON.stringify(DEF_COMPRAS));MOVIMIENTOS=JSON.parse(JSON.stringify(DEF_MOVS));
@@ -622,9 +754,7 @@ function closeSidebar(){
   $('hamburger').classList.remove('open');
   $('sb-overlay').classList.remove('show');
 }
-// Close sidebar when nav item clicked on mobile
 document.querySelectorAll('.nav-item').forEach(el=>{
   el.addEventListener('click',()=>{ if(window.innerWidth<=768) closeSidebar(); });
 });
-// Close on resize to desktop
 window.addEventListener('resize',()=>{ if(window.innerWidth>768) closeSidebar(); });
