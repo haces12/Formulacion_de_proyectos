@@ -44,7 +44,7 @@ function save(){LS.set('users',USERS);LS.set('products',PRODUCTS);LS.set('provee
 // ═══ HELPERS ═══
 const $=id=>document.getElementById(id);
 const fmt=n=>'L '+Number(n).toLocaleString('es-HN',{minimumFractionDigits:2,maximumFractionDigits:2});
-const today=()=>new Date().toISOString().split('T')[0];
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 
 // ── CORRECCIÓN 1: prefijo de mes dinámico (no hardcodeado) ──
 const currentMonthPrefix=()=>{
